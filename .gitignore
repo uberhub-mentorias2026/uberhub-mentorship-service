@@ -1,0 +1,21 @@
+# Build
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Segredos e configs locais (NUNCA subir)
+.env
+application-local.properties
+application-local.yml
+firebase-service-account.json
+
+# Logs / SO
+*.log
+.DS_Store
