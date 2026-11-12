@@ -1,10 +1,11 @@
 package br.com.uberhub.mentorship.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Pattern;
 
 public record RedeemVoucherRequest(
         @NotBlank(message = "é obrigatório")
-        @Size(max = 64, message = "deve ter no máximo 64 caracteres")
+        @Pattern(regexp = "(?i)[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}",
+                 message = "formato inválido, use XXXX-XXXX-XXXX")
         String code) {
 }

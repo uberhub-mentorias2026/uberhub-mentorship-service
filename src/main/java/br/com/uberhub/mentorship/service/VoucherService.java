@@ -22,9 +22,9 @@ import br.com.uberhub.mentorship.repository.VoucherRepository;
 @Service
 public class VoucherService {
 
-    // Sem caracteres ambíguos (0/O, 1/I) para evitar erro de digitação do usuário
+    // Letras e números, sem caracteres ambíguos (0/O, 1/I), para evitar erro de digitação
     private static final String ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    private static final int CODE_LENGTH = 8;   // formato XXXX-XXXX
+    private static final int CODE_CHARS = 12;   // formato XXXX-XXXX-XXXX (14 com os hifens)
     private static final int GROUP_SIZE = 4;
 
     private final SecureRandom random = new SecureRandom();
@@ -37,9 +37,11 @@ public class VoucherService {
         this.mapper = mapper;
     }
 
-    /** Gera vouchers novos (AVAILABLE). Chamado pelo admin-service. */
+    /** Gera vouchers novos (AVAILABLE), opcionalmente já liberados a um mentor. Chamado pelo admin-service. */
     @Transactional
-    public List<VoucherResponse> generate(int quantity) {
+    public List<VoucherResponse> generate(int quantity, String ownerId) {
+        String owner = (ownerId == null || ownerId.isBlank()) ? null : ownerId.trim();
+
         Set<String> codes = new LinkedHashSet<>();
         while (codes.size() < quantity) {
             String code = newCode();
@@ -49,10 +51,22 @@ public class VoucherService {
         }
 
         List<Voucher> vouchers = codes.stream()
-                .map(code -> Voucher.builder().code(code).status(VoucherStatus.AVAILABLE).build())
+                .map(code -> Voucher.builder()
+                        .code(code)
+                        .status(VoucherStatus.AVAILABLE)
+                        .ownerId(owner)
+                        .build())
                 .toList();
 
         return repository.saveAll(vouchers).stream().map(mapper::toResponse).toList();
+    }
+
+    /** Mentor consulta os vouchers que o admin liberou para ele. */
+    @Transactional(readOnly = true)
+    public List<VoucherResponse> listByOwner(String ownerId) {
+        return repository.findByOwnerIdOrderByCreatedAtDesc(ownerId).stream()
+                .map(mapper::toResponse)
+                .toList();
     }
 
     /** Mentorado resgata um voucher. O menteeId vem do token JWT, nunca do body. */
@@ -67,6 +81,9 @@ public class VoucherService {
             }
             throw new NotFoundException("Voucher não encontrado");
         }
+
+        // TODO: enviar os dados necessários ao admin-service (userId, code, redeemedAt)
+        //       quando o contrato do admin estiver definido (AdminClient).
 
         Voucher voucher = repository.findByCode(code)
                 .orElseThrow(() -> new NotFoundException("Voucher não encontrado"));
@@ -83,12 +100,10 @@ public class VoucherService {
                 voucher.getStatus());
     }
 
-    // TODO (Marco 3): grantToMentor(mentorId) - chamado ao registrar o feedback do mentor
-
     private String newCode() {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < CODE_LENGTH; i++) {
-            if (i == GROUP_SIZE) {
+        for (int i = 0; i < CODE_CHARS; i++) {
+            if (i > 0 && i % GROUP_SIZE == 0) {
                 sb.append('-');
             }
             sb.append(ALPHABET.charAt(random.nextInt(ALPHABET.length())));

@@ -42,21 +42,33 @@ class VoucherControllerTest {
         return jwt().jwt(j -> j.subject(userId)).authorities(new SimpleGrantedAuthority("ROLE_" + role));
     }
 
-    private void criarVoucher(String code) {
-        repository.save(Voucher.builder().code(code).status(VoucherStatus.AVAILABLE).build());
+    private void criarVoucher(String code, String ownerId) {
+        repository.save(Voucher.builder().code(code).status(VoucherStatus.AVAILABLE).ownerId(ownerId).build());
     }
 
     @Test
-    void generate_comoAdmin_retorna201ComVouchersDisponiveis() throws Exception {
+    void generate_comoAdminComDono_retorna201ESalvaODono() throws Exception {
         mvc.perform(post("/api/v1/vouchers/generate")
                         .with(como("ADMIN", "admin-1"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"quantity\":3}"))
+                        .content("{\"quantity\":3,\"ownerId\":\"mentor-1\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.length()").value(3))
-                .andExpect(jsonPath("$[0].status").value("AVAILABLE"));
+                .andExpect(jsonPath("$[0].status").value("AVAILABLE"))
+                .andExpect(jsonPath("$[0].code").value(org.hamcrest.Matchers.matchesPattern("[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}")));
 
         assertThat(repository.count()).isEqualTo(3);
+        assertThat(repository.findByOwnerIdOrderByCreatedAtDesc("mentor-1")).hasSize(3);
+    }
+
+    @Test
+    void generate_semDono_retorna201() throws Exception {
+        mvc.perform(post("/api/v1/vouchers/generate")
+                        .with(como("ADMIN", "admin-1"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"quantity\":2}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.length()").value(2));
     }
 
     @Test
@@ -78,23 +90,40 @@ class VoucherControllerTest {
     }
 
     @Test
+    void listarDoMentor_retornaSomenteOsVouchersDele() throws Exception {
+        criarVoucher("AAAA-1111-BBBB", "mentor-1");
+        criarVoucher("CCCC-2222-DDDD", "mentor-1");
+        criarVoucher("EEEE-3333-FFFF", "mentor-2");
+
+        mvc.perform(get("/api/v1/vouchers/mentor").with(como("MENTOR", "mentor-1")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+    }
+
+    @Test
+    void listarDoMentor_comoMentee_retorna403() throws Exception {
+        mvc.perform(get("/api/v1/vouchers/mentor").with(como("MENTEE", "mentee-1")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void redeem_fluxoCompleto_resgataDepoisRetorna409() throws Exception {
-        criarVoucher("TEST-0001");
+        criarVoucher("TEST-0001-ABCD", "mentor-1");
 
         mvc.perform(post("/api/v1/vouchers/redeem")
                         .with(como("MENTEE", "mentee-1"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"code\":\"test-0001\"}"))
+                        .content("{\"code\":\"test-0001-abcd\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REDEEMED"));
 
-        Voucher salvo = repository.findByCode("TEST-0001").orElseThrow();
+        Voucher salvo = repository.findByCode("TEST-0001-ABCD").orElseThrow();
         assertThat(salvo.getRedeemedBy()).isEqualTo("mentee-1");
 
         mvc.perform(post("/api/v1/vouchers/redeem")
                         .with(como("MENTEE", "mentee-2"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"code\":\"TEST-0001\"}"))
+                        .content("{\"code\":\"TEST-0001-ABCD\"}"))
                 .andExpect(status().isConflict());
     }
 
@@ -103,18 +132,27 @@ class VoucherControllerTest {
         mvc.perform(post("/api/v1/vouchers/redeem")
                         .with(como("MENTEE", "mentee-1"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"code\":\"NAO-EXISTE\"}"))
+                        .content("{\"code\":\"ZZZZ-ZZZZ-ZZZZ\"}"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
+    void redeem_formatoInvalido_retorna400() throws Exception {
+        mvc.perform(post("/api/v1/vouchers/redeem")
+                        .with(como("MENTEE", "mentee-1"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"ABCD-1234\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void redeem_comoMentor_retorna403() throws Exception {
-        criarVoucher("TEST-0002");
+        criarVoucher("TEST-0002-ABCD", "mentor-1");
 
         mvc.perform(post("/api/v1/vouchers/redeem")
                         .with(como("MENTOR", "mentor-1"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"code\":\"TEST-0002\"}"))
+                        .content("{\"code\":\"TEST-0002-ABCD\"}"))
                 .andExpect(status().isForbidden());
     }
 
@@ -122,25 +160,25 @@ class VoucherControllerTest {
     void redeem_semToken_retorna401() throws Exception {
         mvc.perform(post("/api/v1/vouchers/redeem")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"code\":\"TEST-0001\"}"))
+                        .content("{\"code\":\"TEST-0001-ABCD\"}"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     void validate_disponivelDepoisResgatadoFicaInvalido() throws Exception {
-        criarVoucher("TEST-0003");
+        criarVoucher("TEST-0003-ABCD", "mentor-1");
 
-        mvc.perform(get("/api/v1/vouchers/validate/TEST-0003").with(como("MENTEE", "mentee-1")))
+        mvc.perform(get("/api/v1/vouchers/validate/TEST-0003-ABCD").with(como("MENTEE", "mentee-1")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.valid").value(true));
 
         mvc.perform(post("/api/v1/vouchers/redeem")
                         .with(como("MENTEE", "mentee-1"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"code\":\"TEST-0003\"}"))
+                        .content("{\"code\":\"TEST-0003-ABCD\"}"))
                 .andExpect(status().isOk());
 
-        mvc.perform(get("/api/v1/vouchers/validate/TEST-0003").with(como("MENTEE", "mentee-1")))
+        mvc.perform(get("/api/v1/vouchers/validate/TEST-0003-ABCD").with(como("MENTEE", "mentee-1")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.valid").value(false));
     }

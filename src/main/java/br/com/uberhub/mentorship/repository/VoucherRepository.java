@@ -1,6 +1,7 @@
 package br.com.uberhub.mentorship.repository;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,6 +16,8 @@ public interface VoucherRepository extends JpaRepository<Voucher, Long> {
     Optional<Voucher> findByCode(String code);
 
     boolean existsByCode(String code);
+
+    List<Voucher> findByOwnerIdOrderByCreatedAtDesc(String ownerId);
 
     /**
      * Resgate ATÔMICO: o UPDATE só afeta a linha se o voucher ainda estiver AVAILABLE.

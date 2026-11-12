@@ -18,13 +18,15 @@ public class Voucher {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 64)
+    /** Formato fixo XXXX-XXXX-XXXX (14 caracteres, com hifens). */
+    @Column(nullable = false, unique = true, columnDefinition = "CHAR(14)")
     private String code;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private VoucherStatus status;
 
+    /** Mentor a quem o admin liberou o voucher (quem repassa o código ao mentorado). */
     @Column(name = "owner_id", length = 64)
     private String ownerId;
 

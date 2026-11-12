@@ -35,7 +35,15 @@ public class VoucherController {
     @PostMapping("/generate")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<VoucherResponse>> generate(@Valid @RequestBody GenerateVouchersRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.generate(request.quantity()));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(service.generate(request.quantity(), request.ownerId()));
+    }
+
+    /** Mentor lista os vouchers que o admin liberou para ele (para repassar aos mentorados). */
+    @GetMapping("/mentor")
+    @PreAuthorize("hasRole('MENTOR')")
+    public List<VoucherResponse> listMine(@AuthenticationPrincipal Jwt jwt) {
+        return service.listByOwner(jwt.getSubject());
     }
 
     /** Mentorado resgata um voucher. */
